@@ -682,6 +682,7 @@ export const SEED_ROWS: Record<string, EntryRow[]> = {
       "status": "已归档",
       "pending": true,
       "abnormal": true,
+      "version": 1,
       "档案编号": "FACI-0002",
       "设施名称": "设施档案样例2",
       "设施类别": "设施档案样例2",

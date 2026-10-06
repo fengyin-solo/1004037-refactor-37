@@ -1,3 +1,13 @@
+import {
+  ARCHIVE_ACTION_SUBMIT,
+  ARCHIVE_ACTION_UPDATE,
+  ARCHIVE_ACTION_VOID,
+  ARCHIVE_ACTIONS,
+  ARCHIVE_STATUS_ARCHIVED,
+  ARCHIVE_STATUS_PENDING_UPDATE,
+  ARCHIVE_STATUS_VOID,
+  ARCHIVE_STATUSES,
+} from './archive-rules'
 import type { ModuleMeta } from './types'
 
 // 模块元数据由仓库生成时写入：字段、状态、动作、流转目标都在这里，页面不再各自写一遍。
@@ -173,9 +183,13 @@ export const MODULES: ModuleMeta[] = [
     entity: "设施档案",
     desc: "维护设施档案，围绕档案编号、设施名称、设施类别、所属区域做登记、筛选与状态流转。",
     fields: ["档案编号", "设施名称", "设施类别", "所属区域", "竣工日期", "设计图纸", "承建企业", "档案状态"],
-    statuses: ["待归档", "已归档", "待更新", "已作废"],
-    actions: ["提交归档", "更新档案", "作废档案"],
-    actionTargets: {"提交归档": "已归档", "更新档案": "待更新", "作废档案": "已作废"},
+    statuses: [...ARCHIVE_STATUSES],
+    actions: [...ARCHIVE_ACTIONS],
+    actionTargets: {
+      [ARCHIVE_ACTION_SUBMIT]: ARCHIVE_STATUS_ARCHIVED,
+      [ARCHIVE_ACTION_UPDATE]: ARCHIVE_STATUS_PENDING_UPDATE,
+      [ARCHIVE_ACTION_VOID]: ARCHIVE_STATUS_VOID,
+    },
     metrics: ["档案总数", "待归档档案", "待更新档案"],
   },
   {

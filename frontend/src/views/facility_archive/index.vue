@@ -38,6 +38,8 @@
         <tr>
           <th v-for="column in columns" :key="column">{{ column }}</th>
           <th>当前状态</th>
+          <th>版本</th>
+          <th>材料</th>
           <th>可执行动作</th>
         </tr>
       </thead>
@@ -45,23 +47,50 @@
         <tr v-for="row in rows" :key="String(row.id)">
           <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
           <td>{{ row.status }}</td>
+          <td>{{ versionLabel(row) }}</td>
+          <td>
+            <span v-if="missingLabels(row).length" class="error-text">
+              缺 {{ missingLabels(row).join('、') }}
+            </span>
+            <span v-else>齐全</span>
+          </td>
           <td class="row-actions">
-            <button
-              v-for="action in actions"
-              :key="action"
-              class="link"
-              type="button"
-              @click="runAction(action, row)"
-            >
-              {{ action }}
-            </button>
+            <template v-for="action in availableActions(row)" :key="action">
+              <button class="link" type="button" @click="runAction(action, row)">{{ action }}</button>
+            </template>
+            <span v-if="!availableActions(row).length" class="read-only-hint">只读</span>
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="empty-state">暂无设施档案数据，可先登记设施档案</td>
+          <td :colspan="columns.length + 4" class="empty-state">暂无设施档案数据，可先登记设施档案</td>
         </tr>
       </tbody>
     </table>
+
+    <section class="history-block">
+      <h3>历史版本（只读）</h3>
+      <table v-if="history.length" class="data-table">
+        <thead>
+          <tr>
+            <th>档案编号</th>
+            <th>设施名称</th>
+            <th>归档版本</th>
+            <th>归档时间</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in history" :key="`${String(item.id)}-${String(item[snapshotVersionField])}`">
+            <td>{{ item['档案编号'] ?? '—' }}</td>
+            <td>{{ item['设施名称'] ?? '—' }}</td>
+            <td>V{{ item[snapshotVersionField] }}</td>
+            <td>{{ formatTime(item[snapshotAtField]) }}</td>
+            <td>{{ item.status }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="empty-state">暂无历史版本；档案更新并重新归档后，旧版本会保存在这里。</p>
+    </section>
 
     <footer class="page-foot">
       <span>共 {{ total }} 条设施档案记录</span>
@@ -75,19 +104,33 @@ import { computed, onMounted, ref } from 'vue'
 
 import {
   downloadEntries,
+  listArchiveHistory,
   listEntries,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import {
+  ARCHIVE_SNAPSHOT_AT_FIELD,
+  ARCHIVE_SNAPSHOT_VERSION_FIELD,
+  ARCHIVE_STATUSES,
+  archiveVersion,
+  availableArchiveActions,
+  missingArchiveMaterials,
+  type ArchiveAction,
+  type ArchiveSnapshot,
+} from '@/data/archive-rules'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('facility_archive')
 const columns = ["档案编号", "设施名称", "设施类别", "所属区域", "竣工日期", "设计图纸", "承建企业", "档案状态"]
-const actions = ["提交归档", "更新档案", "作废档案"]
-const statuses = ["待归档", "已归档", "待更新", "已作废"]
+// 状态与动作按钮全部取自共用档案规则，页面不再各自硬编码。
+const statuses = [...ARCHIVE_STATUSES]
 const stats = [{"label": "档案总数", "value": 0}, {"label": "待归档档案", "value": 0}, {"label": "待更新档案", "value": 0}]
+const snapshotVersionField = ARCHIVE_SNAPSHOT_VERSION_FIELD
+const snapshotAtField = ARCHIVE_SNAPSHOT_AT_FIELD
 
 const rows = ref<EntryRow[]>([])
+const history = ref<ArchiveSnapshot[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
@@ -98,6 +141,27 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+
+function availableActions(row: EntryRow): ArchiveAction[] {
+  return availableArchiveActions(row)
+}
+
+function missingLabels(row: EntryRow): string[] {
+  return missingArchiveMaterials(row).map((item) => item.label)
+}
+
+function versionLabel(row: EntryRow): string {
+  const version = archiveVersion(row)
+  return version > 0 ? `V${version}` : '—'
+}
+
+function formatTime(value: unknown): string {
+  if (typeof value !== 'string' || value === '') {
+    return '—'
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
 
 function resetFilters() {
   filters.value = {}
@@ -112,7 +176,7 @@ function openCreate() {
   errorMessage.value = '设施档案登记入口尚未接入审批流'
 }
 
-function runAction(action: string, row: EntryRow) {
+function runAction(action: ArchiveAction | string, row: EntryRow) {
   errorMessage.value = ''
   const result = applyAction(meta.key, Number(row.id), action)
   if (!result.ok) {
@@ -128,6 +192,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    history.value = listArchiveHistory()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '设施档案列表读取失败'
   }
@@ -135,3 +200,19 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.history-block {
+  margin-top: 20px;
+}
+
+.history-block h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.read-only-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+</style>
