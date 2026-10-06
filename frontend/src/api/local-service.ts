@@ -1,4 +1,8 @@
 import { MODULE_BY_KEY } from '@/data/modules'
+import {
+  applyArchiveAction,
+  isArchiveModule,
+} from '@/data/archive-rules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
@@ -38,6 +42,17 @@ export function runAction(key: string, id: number, action: string): ActionResult
   const index = rows.findIndex((row) => Number(row.id) === id)
   if (index < 0) {
     return { ok: false, message: `没有找到编号为 ${id} 的${meta.entity}` }
+  }
+  // 设施档案：归档/更新/作废/版本统一走共用规则，不允许在服务层之外另写判断。
+  if (isArchiveModule(key)) {
+    const outcome = applyArchiveAction(rows[index], action)
+    if (!outcome.ok) {
+      return { ok: false, message: outcome.message }
+    }
+    const next = [...rows]
+    next[index] = outcome.row
+    saveRows(key, next)
+    return { ok: true, message: outcome.message }
   }
   const current = String(rows[index].status)
   if (current === target) {

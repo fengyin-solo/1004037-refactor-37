@@ -67,5 +67,8 @@ npm run build
   `frontend/src/api/local-service.ts`。
 - 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据在
   `frontend/src/data/seed.ts`。
+- 设施档案的归档、更新、作废、材料齐全度、版本与历史版本判断只有一份，集中在
+  `frontend/src/data/archive-rules.ts`；动作执行、页面可执行动作、历史版本三处都读它。
+  新增一种设施材料类型，只在 `MATERIAL_TYPES` 里登记一行必填材料即可。
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
 - 想回到初始数据：清掉浏览器里 `underground-pipeline-inspection:entries` 这一项，或调用 `resetModule(模块)`。

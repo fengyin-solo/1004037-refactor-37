@@ -47,7 +47,7 @@
           <td>{{ row.status }}</td>
           <td class="row-actions">
             <button
-              v-for="action in actions"
+              v-for="action in rowActions(row)"
               :key="action"
               class="link"
               type="button"
@@ -55,6 +55,7 @@
             >
               {{ action }}
             </button>
+            <button class="link" type="button" @click="openHistory(row)">历史版本</button>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -67,12 +68,45 @@
       <span>共 {{ total }} 条设施档案记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <div v-if="historyTarget" class="modal-mask" @click.self="closeHistory">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-label="历史版本">
+        <header class="modal-head">
+          <h3>历史版本 · {{ historyTarget['档案编号'] }}</h3>
+          <button class="btn ghost" type="button" @click="closeHistory">关闭</button>
+        </header>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>版本</th>
+              <th>状态</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in historyVersions" :key="item.version">
+              <td>第 {{ item.version }} 版</td>
+              <td>{{ item.statusLabel }}</td>
+              <td>{{ item.note }}</td>
+            </tr>
+            <tr v-if="!historyVersions.length">
+              <td colspan="3" class="empty-state">该档案尚未归档，暂无历史版本</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
+import {
+  archiveHistoryVersions,
+  listAvailableActions,
+  type ArchiveHistoryVersion,
+} from '@/data/archive-rules'
 import {
   downloadEntries,
   listEntries,
@@ -83,7 +117,6 @@ import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('facility_archive')
 const columns = ["档案编号", "设施名称", "设施类别", "所属区域", "竣工日期", "设计图纸", "承建企业", "档案状态"]
-const actions = ["提交归档", "更新档案", "作废档案"]
 const statuses = ["待归档", "已归档", "待更新", "已作废"]
 const stats = [{"label": "档案总数", "value": 0}, {"label": "待归档档案", "value": 0}, {"label": "待更新档案", "value": 0}]
 
@@ -98,6 +131,27 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+
+// 可执行动作直接读共用规则，页面不再自维护一份动作清单，和执行入口天然一致。
+function rowActions(row: EntryRow): string[] {
+  return listAvailableActions(row)
+}
+
+const historyTargetId = ref<number | null>(null)
+const historyTarget = computed<EntryRow | null>(
+  () => rows.value.find((row) => Number(row.id) === historyTargetId.value) ?? null,
+)
+const historyVersions = computed<ArchiveHistoryVersion[]>(() =>
+  historyTarget.value ? archiveHistoryVersions(historyTarget.value) : [],
+)
+
+function openHistory(row: EntryRow) {
+  historyTargetId.value = Number(row.id)
+}
+
+function closeHistory() {
+  historyTargetId.value = null
+}
 
 function resetFilters() {
   filters.value = {}
@@ -135,3 +189,33 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+.modal-card {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+</style>
